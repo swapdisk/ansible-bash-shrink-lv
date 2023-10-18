@@ -1,8 +1,16 @@
 # ansible-bash-shrink-lv
-Ansible role that runs shrinks a logical volume script. The role contains the shell scripts to shrink the logical volume, as well as the script wrapping it to run as part of the pre-mount step during the boot process.
+Ansible role that shrinks a logical volume. The role contains the shell scripts to shrink the logical volume, as well as the script wrapping it to run as part of the pre-mount step during the boot process.
+The shrink script uses the value defined with the key `x-systemd.shrinkfs` in the options field for the device entry in the `/etc/fstab` to determine the new size. Example:
+
+```
+/dev/mapper/fedora-fedora /mnt ext4 defaults,x-systemd.shrinkfs=3G 1 2
+```
+
+This instructs the shrink script to reduce the `/dev/mapper/fedora-fedora` device to `3G`.
 
 ## Example of a playbook to run the role
-The following yaml is an example of a playbook that runs the role against a group of hosts named `rhel` and extending its boot partition by 1G. The boot partition is automatically retrieved by the role by identifying the existing mounted partition to `/boot` and passing the information to the script using the `kernel_opts`.
+The following yaml is an example of a playbook that runs the role against a group of hosts named `rhel` to extend their boot partition by 1G.
+The boot partition is automatically retrieved by the role by identifying the existing mounted partition to `/boot` and passing the information to the script using the `kernel_opts`.
 
 ```yaml
 - name: Shrink Logical Volumes playbook
@@ -19,7 +27,7 @@ The following yaml is an example of a playbook that runs the role against a grou
 ```
 
 With an inventory file consisting of group [rhel]:
-```yaml
+```ini
 [rhel]
 localhost
 
@@ -29,7 +37,8 @@ ansible_port=2022
 ```
 
 # Validate execution
-The script will add an entry to the kernel messages (`/dev/kmsg` or `/var/log/messages`) with success or failure. In case of failure, it may also include an error message retrieved from the execution of the script.
+The script will add an entry to the kernel messages (`/dev/kmsg` or `/var/log/messages`) with success or failure.
+In case of failure, it may also include an error message retrieved from the execution of the script.
 
 A successful execution will look similar to this:
 ```bash
