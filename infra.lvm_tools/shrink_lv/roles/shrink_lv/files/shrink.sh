@@ -163,7 +163,7 @@ function process_entry() {
     fi
     expected_size_in_bytes=$(parse_tag "$2")
     if [[ -z "$expected_size_in_bytes" ]]; then
-        echo "Error: Tag $SHRINK_TAG not found for device '$3' in '$2'" >&2
+        echo "Warning: Tag $SHRINK_TAG not found for device '$3' in '$2'" >&2
         return 1
     fi
     check_filesystem_size "$1" "$expected_size_in_bytes"
