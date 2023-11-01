@@ -1,31 +1,5 @@
 #!/bin/bash
 
-FSTAB_FILE='/etc/fstab'
-SHRINK_TAG='x-systemd.shrinkfs'
-ARRAY_IFS=$'\n'
-
-function read_fstab() {
-    local -a entries=()
-    while read -r line; do
-        case $line in
-        \#* )
-        ;;
-        "" )
-        ;;
-        UUID=*|/dev/* )
-        if [[ "$line" == "$device_name "* || $all_devices == true ]]; then
-            entries+=("$line")
-            if [[ "$line" == "$device_name "* ]]; then
-                break
-            fi
-        fi
-        ;;
-        esac
-    done < "$FSTAB_FILE"
-    echo "${entries[*]}"
-}
-
-
 function get_device_name() {
     if [[ "$1" == "UUID="* ]]; then
         dev_name=$( parse_uuid "$1" )
@@ -38,22 +12,10 @@ function get_device_name() {
     fi
     echo "$dev_name"
     return $status
-} 
-
-function get_tag_value_in_bytes() {
-    IFS=, read -ra options <<< "$1"
-    for opt in "${options[@]}"; do
-        if [[ "$opt" == "$SHRINK_TAG="* ]]; then
-            /usr/bin/numfmt  --from iec "${opt#*=}" 
-            break
-        fi
-    done
 }
 
-function parse_tag() {
-    if [[ "$1" == *"$SHRINK_TAG="* ]]; then 
-        get_tag_value_in_bytes "$1"
-    fi
+function ensure_size_in_bytes() {
+    /usr/bin/numfmt  --from iec "$1"
 }
 
 function is_device_mounted() {
@@ -102,12 +64,10 @@ function parse_uuid() {
     return 0
 }
 
-
 function shrink_volume() {
     /usr/sbin/lvm lvreduce --resizefs -L "$2b" "$1"
     return $?
 }
-
 
 function check_volume_size() {
     current_size=$(get_current_volume_size "$1")
@@ -141,7 +101,7 @@ function check_filesystem_size() {
     local device=$1
     local new_fs_size_in_blocks=$2
     new_fs_size_in_blocks=$(calculate_expected_resized_file_system_size_in_blocks "$device")
-# it is possible that running this command after resizing it might give an even smaller number. 
+# it is possible that running this command after resizing it might give an even smaller number.
     minimum_blocks_required=$(/usr/sbin/resize2fs -P "$device" 2> /dev/null | /usr/bin/awk  '{print $NF}')
 
     if [[ "$new_fs_size_in_blocks" -le "0" ]]; then
@@ -161,11 +121,7 @@ function process_entry() {
     if [[ $status -ne 0 ]]; then
         return "$status"
     fi
-    expected_size_in_bytes=$(parse_tag "$2")
-    if [[ -z "$expected_size_in_bytes" ]]; then
-        echo "Warning: Tag $SHRINK_TAG not found for device '$3' in '$2'" >&2
-        return 1
-    fi
+    expected_size_in_bytes=$(ensure_size_in_bytes "$2")
     check_filesystem_size "$1" "$expected_size_in_bytes"
     status=$?
     if [[ $status -ne 0 ]]; then
@@ -185,36 +141,25 @@ function process_entry() {
     return $?
 }
 
-
 function display_help() {
-    echo "Program to shrink an ext4 file system hosted in a Logical Volume. It retrieves the new size from the value of the option named systemd.shrinkfs captured in the /etc/fstab entry of the device. 
-    
-    Usage: '$(basename "$0")' [-h] [-d=|--device=|--all]
+    echo "Program to shrink an ext4 file system hosted in a Logical Volume.
+
+    Usage: '$(basename "$0")' [-h] [-d=|--device=]
 
     Example:
 
     where:
         -h show this help text
-        -d|--device= name or UUID of the device that holds an ext4 file system in /etc/fstab to shrink. It maps to the first column in the /etc/fstab file
-        --all processes all devices in the '/etc/fstab' that contains the $SHRINK_TAG option"
-
+        -d|--device= name or UUID of the device that holds an ext4 and the new size separated by a ':'
+                     for example /dev/my_group/my_vol:2G"
 }
+
 function parse_flags() {
     for i in "$@"
         do
         case $i in
-            --fstab=*)
-            FSTAB_FILE="${i#*=}"
-            ;;
-            --all)
-            all_devices=true
-            ;;
             -d=*|--device=*)
-            if [[ -n $device_name ]]; then
-                echo "Only one device flag '-d|--device' is supported"
-                exit 1
-            fi
-            device_name="${i#*=}"
+            entries+=(${i#*=})
             ;;
             -h)
             display_help
@@ -223,52 +168,57 @@ function parse_flags() {
             *)
             # unknown option
             echo "Unknown flag $i"
+            display_help
             exit 1
             ;;
         esac
     done
-    if [[ $all_devices == true && -n "$device_name" ]]; then
-        echo "Invalid combination of flags: --all and -d|--device" >&2
-        exit 1
-    fi
-    if [[ $all_devices == false && -z "$device_name" ]]; then
+    if [[ ${#entries[@]} == 0 ]]; then
         display_help
         exit 0
     fi
 }
 
+function parse_entry() {
+    IFS=':'
+    read -a strarr <<< "$1"
+
+    if [[ ${#strarr[@]} != 2 ]]; then
+        echo "Invalid device entry $1"
+        display_help
+        return 1
+    fi
+
+    device="${strarr[0]}"
+    expected_size="${strarr[1]}"
+}
+
 function main() {
 
-    local device_name
-    local all_devices=false
+    local -a entries=()
     local run_status=0
-    
+
     parse_flags "$@"
-    IFS="${ARRAY_IFS}" devices=($(read_fstab))
-    if [[ ${#devices[@]} == 0 ]]; then
-        if [[ $all_devices == true ]]; then 
-            echo "No devices found in '/etc/fstab'" >&2
-            exit 1
-        fi
-        echo "Device '$device_name' not found in fstab" >&2
-        exit 1
-    fi
-  
-    for entry in "${devices[@]}"
+
+    for entry in "${entries[@]}"
     do
-        device_name=$( get_device_name "$entry" )
+        local device
+        local expected_size
+        parse_entry "$entry"
         status=$?
         if [[ $status -ne 0 ]]; then
             run_status=$status
             continue
         fi
-        opts=$( /usr/bin/awk '{print $4}' <<< "$entry" )
+        device_name=$( get_device_name "$device" )
         status=$?
         if [[ $status -ne 0 ]]; then
             run_status=$status
             continue
         fi
-        process_entry "$device_name" "$opts" "$( /usr/bin/awk '{print $1}' <<< "$entry" )"
+
+        process_entry "$device_name" "$expected_size" "$device"
+
         status=$?
         if [[ $status -ne 0 ]]; then
             run_status=$status

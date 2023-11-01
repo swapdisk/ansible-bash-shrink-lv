@@ -9,6 +9,5 @@ check(){
 install() {
     inst_multiple -o /usr/bin/numfmt /usr/bin/findmnt /usr/bin/lsblk /usr/sbin/lvm /usr/bin/awk /usr/bin/sed /usr/bin/mktemp /usr/bin/date /usr/bin/head /usr/sbin/blockdev /usr/sbin/tune2fs /usr/sbin/resize2fs /usr/bin/cut /usr/sbin/fsadm /usr/sbin/fsck.ext4
     inst_hook pre-mount 99 "$moddir/shrink-start.sh"
-    inst_simple "$moddir/fstab" "/etc/fstab.root"
     inst_simple "$moddir/shrink.sh" "/usr/bin/shrink.sh"
 }

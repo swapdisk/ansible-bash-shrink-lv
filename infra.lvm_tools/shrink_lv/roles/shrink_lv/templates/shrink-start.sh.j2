@@ -21,7 +21,7 @@ activate_volume_groups(){
 main() {
     activate_volume_groups
     disable_lvm_lock
-    /usr/bin/shrink.sh --all --fstab=/etc/fstab.root 1>&2 >/dev/kmsg
+    /usr/bin/shrink.sh {% for device in shrink_lv_devices %}--device={{ device.device }}:{{ device.size }} {% endfor %} 1>&2 >/dev/kmsg
 }
 
 main "$0"

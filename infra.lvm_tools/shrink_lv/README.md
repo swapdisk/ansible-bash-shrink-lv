@@ -1,12 +1,15 @@
 # ansible-bash-shrink-lv
-Ansible role that shrinks a logical volume. The role contains the shell scripts to shrink the logical volume, as well as the script wrapping it to run as part of the pre-mount step during the boot process.
-The shrink script uses the value defined with the key `x-systemd.shrinkfs` in the options field for the device entry in the `/etc/fstab` to determine the new size. Example:
-
+Ansible role for shrinking a logical volume.
+The role contains the shell scripts to shrink the logical volume,
+as well as the script wrapping it to run as part of the pre-mount step during the boot process.
+The devices to shrink and their expected sizes should be passed via the `shrink_lv_devices` variable.
+For example
 ```
-/dev/mapper/fedora-fedora /mnt ext4 defaults,x-systemd.shrinkfs=3G 1 2
+vars:
+  shrink_lv_devices:
+  - device: /dev/mapper/test
+    size: 4G
 ```
-
-This instructs the shrink script to reduce the `/dev/mapper/fedora-fedora` device to `3G`.
 
 ## Example of a playbook to run the role
 The following yaml is an example of a playbook that runs the role against a group of hosts named `rhel` to extend their boot partition by 1G.
@@ -16,6 +19,10 @@ The boot partition is automatically retrieved by the role by identifying the exi
 - name: Shrink Logical Volumes playbook
   hosts: rhel
   debugger: on_failed
+  vars:
+    shrink_lv_devices:
+      - device: /dev/mapper/test
+        size: 4G
   pre_tasks:
     - name: Gather facts
       ansible.builtin.setup:
