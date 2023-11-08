@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 disable_lvm_lock(){
     tmpfile=$(/usr/bin/mktemp)
     sed -e 's/\(^[[:space:]]*\)locking_type[[:space:]]*=[[:space:]]*[[:digit:]]/\1locking_type = 1/' /etc/lvm/lvm.conf >"$tmpfile"
@@ -13,8 +12,14 @@ disable_lvm_lock(){
     mv "$tmpfile" /etc/lvm/lvm.conf
 }
 
+activate_volume_groups(){
+    for vg in `/usr/sbin/lvm vgs -o name --noheading 2>/dev/null`; do
+        /usr/sbin/lvm vgchange -ay $vg
+    done
+}
 
 main() {
+    activate_volume_groups
     disable_lvm_lock
     /usr/bin/shrink.sh --all --fstab=/etc/fstab.root 1>&2 >/dev/kmsg
 }
